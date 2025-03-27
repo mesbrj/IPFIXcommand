@@ -1,10 +1,16 @@
 package main
 
 /*
+#cgo LDFLAGS: -L/home/mesb/libfixbuf-3.0.0.alpha2/src/.libs/ -lfixbuf
+#cgo CFLAGS: -I/home/mesb/libfixbuf-3.0.0.alpha2/src/
+#cgo LDFLAGS: -lglib-2.0
 #cgo CFLAGS: -I/usr/include/glib-2.0
+
+#include <stdio.h>
 #include <stdint.h>
 #include <string.h>
 #include <fixbuf/public.h>
+
 #define FATAL(e)                                \
     { fprintf(stderr, "Failed at %s:%d: %s\n",  \
             __FILE__, __LINE__, e->message);    \
@@ -24,7 +30,8 @@ fbInfoElementSpec_t collectTemplate[] = {
     {"ipPayloadPacketSection",              0, 0 },
     FB_IESPEC_NULL
 };
-struct collectRecord_st {
+
+typedef struct {
     uint64_t      flowStartMilliseconds;
     uint64_t      flowEndMilliseconds;
     uint32_t      sourceIPv4Address;
@@ -36,27 +43,64 @@ struct collectRecord_st {
     uint64_t      packetTotalCount;
     uint64_t      octetTotalCount;
     fbVarfield_t  payload;
-} collectRecord;
+} collectRecord_st;
 
-fbInfoModel_t *mymodel; // Declare mymodel
+collectRecord_st collectRecord;
 
+fbInfoModel_t   *model;
+fbSession_t     *session;
 fbCollector_t   *collector;
 fbTemplate_t    *tmpl;
 fBuf_t          *fbuf;
 uint16_t         tid;
 size_t           reclen;
+FILE            *IpfixFile;
 GError          *err = NULL;
+
+void collectRecordFillMemory() {
+    memset(&collectRecord, 0, sizeof(collectRecord));
+}
+collectRecord_st* getCollectRecord() {
+    return &collectRecord;
+}
+
+void modelInit() {
+    model = fbInfoModelAlloc();
+    if (!fbInfoModelReadXMLFile(model, "/home/mesb/libfixbuf-3.0.0.alpha2/src/cert_ipfix.xml", &err))
+        FATAL(err);
+}
+
+void sessionInit() {
+    session = fbSessionAlloc(model);
+}
+
+void collectorInit(char* filename) {
+    IpfixFile = fopen(filename, "r");
+    if (!IpfixFile) {
+        perror("fopen");
+        exit(1);
+    }
+    collector = fbCollectorAllocFP(NULL, IpfixFile);
+}
+
+
+
+
 */
 import "C"
+
 import (
-	"fmt"
-	"unsafe"
+	"github.com/davecgh/go-spew/spew"
 )
 
 func main() {
 
-	fmt.Println("Hello, Wor3tld!")
+	C.collectRecordFillMemory()
 
-	C.memset(unsafe.Pointer(&C.collectRecord), 0, C.size_t(unsafe.Sizeof(C.collectRecord)))
+	C.modelInit()
+	C.sessionInit()
+	C.collectorInit(C.CString("wireshark_new.ipfix"))
 
+	collectRecord := C.getCollectRecord()
+	spew.Dump(collectRecord)
 }
