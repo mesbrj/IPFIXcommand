@@ -18,6 +18,10 @@ package main
         exit(1); }
 
 fbInfoElementSpec_t collectTemplate[] = {
+    {"privateEnterpriseNumber",             4, 0 },
+    {"informationElementId",                2, 0 },
+    {"informationElementDataType",          1, 0 },
+    {"informationElementSemantics",         1, 0 },
     {"flowStartMilliseconds",               8, 0 },
     {"flowEndMilliseconds",                 8, 0 },
     {"sourceIPv4Address",                   4, 0 },
@@ -33,6 +37,10 @@ fbInfoElementSpec_t collectTemplate[] = {
 };
 
 typedef struct {
+    uint32_t      privateEnterpriseNumber;
+    uint16_t      informationElementId;
+    uint8_t       informationElementDataType;
+    uint8_t       informationElementSemantics;
     uint64_t      flowStartMilliseconds;
     uint64_t      flowEndMilliseconds;
     uint32_t      sourceIPv4Address;
@@ -104,41 +112,6 @@ bool nextRecord() {
         return false;
 }
 
-void processBuf() {
-    reclen = sizeof(collectRecord);
-    while (fBufNext(fbuf, (uint8_t *)&collectRecord, &reclen, &err)) {
-        ldiv_t     dt;
-        char       buf[256];
-        size_t     sz;
-        uint32_t   ip;
-        dt = ldiv(collectRecord.flowStartMilliseconds, 1000);
-        sz = strftime(buf, sizeof(buf), "%Y-%m-%d %H:%M:%S",
-                      gmtime((time_t *)&dt.quot));
-        snprintf(buf + sz, sizeof(buf) - sz, ".%.3ld", dt.rem);
-        printf("Start time:   %s\n", buf);
-        dt = ldiv(collectRecord.flowEndMilliseconds, 1000);
-        sz = strftime(buf, sizeof(buf), "%Y-%m-%d %H:%M:%S",
-                      gmtime((time_t *)&dt.quot));
-        snprintf(buf + sz, sizeof(buf) - sz, ".%.3ld", dt.rem);
-        printf("End time:     %s\n", buf);
-        ip = collectRecord.sourceIPv4Address;
-        printf("Source:       %d.%d.%d.%d:%d\n",
-                (ip >> 24), (ip >> 16) & 0xff, (ip >> 8) & 0xff, ip & 0xff,
-                collectRecord.sourceTransportPort);
-        ip = collectRecord.destinationIPv4Address;
-        printf("Destination:  %d.%d.%d.%d:%d\n",
-                (ip >> 24), (ip >> 16) & 0xff, (ip >> 8) & 0xff, ip & 0xff,
-                collectRecord.destinationTransportPort);
-        printf("Protocol:     %d\n", collectRecord.protocolIdentifier);
-        printf("Packets:      %" PRIu64 "\n", collectRecord.packetTotalCount);
-        printf("Octets:       %" PRIu64 "\n", collectRecord.octetTotalCount);
-        printf("Payload:     ");
-        for (sz = 0; sz < collectRecord.payload.len; ++sz)
-            printf(" %02x", collectRecord.payload.buf[sz]);
-        printf("\n\n");
-    }
-}
-
 void freeMemory() {
     fBufFree(fbuf);
     fbInfoModelFree(model);
@@ -146,23 +119,26 @@ void freeMemory() {
 
 */
 import "C"
-import "github.com/davecgh/go-spew/spew"
+import (
+	"github.com/davecgh/go-spew/spew"
+)
 
-func main() {
-
-	C.collectRecordFillMemory()
-
+func startFileCollector(ipfixFile string) {
 	C.modelInit()
 	C.sessionInit()
 	C.templateAlloc()
-	C.collectorInit(C.CString("wireshark_new.ipfix"))
+	C.collectorInit(C.CString(ipfixFile))
+	C.collectRecordFillMemory()
+}
+
+func main() {
+
+	startFileCollector("wireshark_new.ipfix")
+	defer C.freeMemory()
 
 	ipfixCollectRecord := C.getCollectRecord()
-	spew.Dump(ipfixCollectRecord)
-	C.nextRecord()
-	spew.Dump(ipfixCollectRecord)
+	for C.nextRecord() {
+		spew.Dump(ipfixCollectRecord)
+	}
 
-	C.processBuf()
-
-	C.freeMemory()
 }
