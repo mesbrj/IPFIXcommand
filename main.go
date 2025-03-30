@@ -9,6 +9,7 @@ package main
 #include <stdio.h>
 #include <stdint.h>
 #include <string.h>
+#include <stdbool.h>
 #include <fixbuf/public.h>
 
 #define FATAL(e)                                \
@@ -74,6 +75,15 @@ void sessionInit() {
     session = fbSessionAlloc(model);
 }
 
+void templateAlloc() {
+    tmpl = fbTemplateAlloc(model);
+    if (!fbTemplateAppendSpecArray(tmpl, collectTemplate, ~0, &err))
+        FATAL(err);
+    if (!(tid = fbSessionAddTemplate(
+            session, TRUE, FB_TID_AUTO, tmpl, NULL, &err)))
+        FATAL(err);
+}
+
 void collectorInit(char* filename) {
     IpfixFile = fopen(filename, "r");
     if (!IpfixFile) {
@@ -81,17 +91,62 @@ void collectorInit(char* filename) {
         exit(1);
     }
     collector = fbCollectorAllocFP(NULL, IpfixFile);
+    fbuf = fBufAllocForCollection(session, collector);
+    if (!fBufSetInternalTemplate(fbuf, tid, &err))
+        FATAL(err);
 }
 
+bool nextRecord() {
+    reclen = sizeof(collectRecord);
+    if (fBufNext(fbuf, (uint8_t *)&collectRecord, &reclen, &err))
+        return true;
+    else
+        return false;
+}
 
+void processBuf() {
+    reclen = sizeof(collectRecord);
+    while (fBufNext(fbuf, (uint8_t *)&collectRecord, &reclen, &err)) {
+        ldiv_t     dt;
+        char       buf[256];
+        size_t     sz;
+        uint32_t   ip;
+        dt = ldiv(collectRecord.flowStartMilliseconds, 1000);
+        sz = strftime(buf, sizeof(buf), "%Y-%m-%d %H:%M:%S",
+                      gmtime((time_t *)&dt.quot));
+        snprintf(buf + sz, sizeof(buf) - sz, ".%.3ld", dt.rem);
+        printf("Start time:   %s\n", buf);
+        dt = ldiv(collectRecord.flowEndMilliseconds, 1000);
+        sz = strftime(buf, sizeof(buf), "%Y-%m-%d %H:%M:%S",
+                      gmtime((time_t *)&dt.quot));
+        snprintf(buf + sz, sizeof(buf) - sz, ".%.3ld", dt.rem);
+        printf("End time:     %s\n", buf);
+        ip = collectRecord.sourceIPv4Address;
+        printf("Source:       %d.%d.%d.%d:%d\n",
+                (ip >> 24), (ip >> 16) & 0xff, (ip >> 8) & 0xff, ip & 0xff,
+                collectRecord.sourceTransportPort);
+        ip = collectRecord.destinationIPv4Address;
+        printf("Destination:  %d.%d.%d.%d:%d\n",
+                (ip >> 24), (ip >> 16) & 0xff, (ip >> 8) & 0xff, ip & 0xff,
+                collectRecord.destinationTransportPort);
+        printf("Protocol:     %d\n", collectRecord.protocolIdentifier);
+        printf("Packets:      %" PRIu64 "\n", collectRecord.packetTotalCount);
+        printf("Octets:       %" PRIu64 "\n", collectRecord.octetTotalCount);
+        printf("Payload:     ");
+        for (sz = 0; sz < collectRecord.payload.len; ++sz)
+            printf(" %02x", collectRecord.payload.buf[sz]);
+        printf("\n\n");
+    }
+}
 
+void freeMemory() {
+    fBufFree(fbuf);
+    fbInfoModelFree(model);
+}
 
 */
 import "C"
-
-import (
-	"github.com/davecgh/go-spew/spew"
-)
+import "github.com/davecgh/go-spew/spew"
 
 func main() {
 
@@ -99,8 +154,15 @@ func main() {
 
 	C.modelInit()
 	C.sessionInit()
+	C.templateAlloc()
 	C.collectorInit(C.CString("wireshark_new.ipfix"))
 
-	collectRecord := C.getCollectRecord()
-	spew.Dump(collectRecord)
+	ipfixCollectRecord := C.getCollectRecord()
+	spew.Dump(ipfixCollectRecord)
+	C.nextRecord()
+	spew.Dump(ipfixCollectRecord)
+
+	C.processBuf()
+
+	C.freeMemory()
 }
