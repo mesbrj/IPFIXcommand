@@ -6,9 +6,7 @@ package main
 #cgo LDFLAGS: -lglib-2.0
 #cgo CFLAGS: -I/usr/include/glib-2.0
 
-#include <stdio.h>
-#include <stdint.h>
-#include <string.h>
+
 #include <stdbool.h>
 #include <fixbuf/public.h>
 
@@ -133,21 +131,26 @@ func startFileCollector(ipfixFile string) {
 	C.collectRecordFillMemory()
 }
 
-func main() {
-
-	startFileCollector("wireshark_new.ipfix")
-	defer C.freeMemory()
-
+func getAllRecords() string {
 	ipfixCollectRecord := C.getCollectRecord()
 	str := spew.Sdump(ipfixCollectRecord)
 	for C.nextRecord() {
 		str += spew.Sdump(ipfixCollectRecord)
 	}
+	return str
+}
+
+func main() {
+
+	startFileCollector("wireshark_new.ipfix")
+	defer C.freeMemory()
+
+	all_recs := getAllRecords()
 
 	var app = tview.NewApplication()
 	var text = tview.NewTextView().
-		SetTextColor(tcell.ColorDarkGreen).
-		SetText(str)
+		SetTextColor(tcell.ColorGreen).
+		SetText(all_recs)
 	if err := app.SetRoot(text, true).EnableMouse(true).Run(); err != nil {
 		panic(err)
 	}
