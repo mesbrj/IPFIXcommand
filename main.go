@@ -121,6 +121,8 @@ void freeMemory() {
 import "C"
 import (
 	"github.com/davecgh/go-spew/spew"
+	"github.com/gdamore/tcell/v2"
+	"github.com/rivo/tview"
 )
 
 func startFileCollector(ipfixFile string) {
@@ -137,8 +139,17 @@ func main() {
 	defer C.freeMemory()
 
 	ipfixCollectRecord := C.getCollectRecord()
+	str := spew.Sdump(ipfixCollectRecord)
 	for C.nextRecord() {
-		spew.Dump(ipfixCollectRecord)
+		str += spew.Sdump(ipfixCollectRecord)
+	}
+
+	var app = tview.NewApplication()
+	var text = tview.NewTextView().
+		SetTextColor(tcell.ColorDarkGreen).
+		SetText(str)
+	if err := app.SetRoot(text, true).EnableMouse(true).Run(); err != nil {
+		panic(err)
 	}
 
 }
