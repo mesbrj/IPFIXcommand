@@ -118,6 +118,8 @@ void freeMemory() {
 */
 import "C"
 import (
+	"fmt"
+
 	"github.com/davecgh/go-spew/spew"
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
@@ -131,11 +133,16 @@ func startFileCollector(ipfixFile, cert_ipfix_registry_xml string) {
 	C.collectRecordFillMemory()
 }
 
-func getAllRecords() string {
+func getAllRecordsAsText() string {
+	str := ""
+	record_count := 0
 	ipfixCollectRecord := C.getCollectRecord()
-	str := spew.Sdump(ipfixCollectRecord)
 	for C.nextRecord() {
-		str += spew.Sdump(ipfixCollectRecord)
+		record_count++
+		str += fmt.Sprintf(
+			"\nIPFIX RECORD %d\n\n%s",
+			record_count,
+			spew.Sdump(ipfixCollectRecord))
 	}
 	return str
 }
@@ -151,7 +158,8 @@ func main() {
 		AddItem(tview.NewFlex().SetDirection(tview.FlexRow).
 			AddItem(tview.NewBox().SetBorder(true).SetTitle("Top"), 0, 1, false).
 			AddItem(tview.NewTextView().SetLabel("   IPFIX Records:   ").
-				SetTextColor(tcell.ColorGreen).SetText(getAllRecords()), 0, 3, false).
+				SetTextColor(tcell.ColorGreen).
+				SetText(getAllRecordsAsText()), 0, 3, false).
 			AddItem(tview.NewBox().SetBorder(true).SetTitle("Bottom (5 rows)"), 5, 1, false), 0, 2, false).
 		AddItem(tview.NewBox().SetBorder(true).SetTitle("Right (20 cols)"), 20, 1, false)
 	if err := app.SetRoot(flex, true).EnableMouse(true).SetFocus(flex).Run(); err != nil {
