@@ -71,9 +71,9 @@ collectRecord_st* getCollectRecord() {
     return &collectRecord;
 }
 
-void modelInit() {
+void modelInit(char* cert_ipfix_registry) {
     model = fbInfoModelAlloc();
-    if (!fbInfoModelReadXMLFile(model, "/home/mesb/libfixbuf-3.0.0.alpha2/src/cert_ipfix.xml", &err))
+    if (!fbInfoModelReadXMLFile(model, cert_ipfix_registry, &err))
         FATAL(err);
 }
 
@@ -123,8 +123,8 @@ import (
 	"github.com/rivo/tview"
 )
 
-func startFileCollector(ipfixFile string) {
-	C.modelInit()
+func startFileCollector(ipfixFile, cert_ipfix_registry_xml string) {
+	C.modelInit(C.CString(cert_ipfix_registry_xml))
 	C.sessionInit()
 	C.templateAlloc()
 	C.collectorInit(C.CString(ipfixFile))
@@ -142,15 +142,15 @@ func getAllRecords() string {
 
 func main() {
 
-	startFileCollector("wireshark_new.ipfix")
+	startFileCollector("wireshark_new.ipfix", "cert_ipfix.xml")
 	defer C.freeMemory()
 
-	all_recs := getAllRecords()
+	all_recs_as_txt := getAllRecords()
 
 	var app = tview.NewApplication()
 	var text = tview.NewTextView().
 		SetTextColor(tcell.ColorGreen).
-		SetText(all_recs)
+		SetText(all_recs_as_txt)
 	if err := app.SetRoot(text, true).EnableMouse(true).Run(); err != nil {
 		panic(err)
 	}
