@@ -1,8 +1,8 @@
 package main
 
 /*
-#cgo LDFLAGS: -L/home/mesb/libfixbuf-3.0.0.alpha2/src/.libs/ -lfixbuf
-#cgo CFLAGS: -I/home/mesb/libfixbuf-3.0.0.alpha2/src/
+#cgo LDFLAGS: -L/usr/local/lib -lfixbuf
+#cgo CFLAGS: -I/usr/local/include/fixbuf
 #cgo LDFLAGS: -lglib-2.0
 #cgo CFLAGS: -I/usr/include/glib-2.0
 
