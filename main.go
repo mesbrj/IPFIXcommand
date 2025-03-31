@@ -159,7 +159,8 @@ func main() {
 			AddItem(tview.NewBox().SetBorder(true).SetTitle("Top"), 0, 1, false).
 			AddItem(tview.NewTextView().SetLabel("   IPFIX Records:   ").
 				SetTextColor(tcell.ColorGreen).
-				SetText(getAllRecordsAsText()), 0, 3, false).
+				SetText(
+					getAllRecordsAsText()), 0, 3, false).
 			AddItem(tview.NewBox().SetBorder(true).SetTitle("Bottom (5 rows)"), 5, 1, false), 0, 2, false).
 		AddItem(tview.NewBox().SetBorder(true).SetTitle("Right (20 cols)"), 20, 1, false)
 	if err := app.SetRoot(flex, true).EnableMouse(true).SetFocus(flex).Run(); err != nil {
