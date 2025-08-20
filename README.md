@@ -1,2 +1,2 @@
 # IPFIXcommand
-![](/ipfix-command.gif)
+![](/HQ_ipfix-command.gif)
