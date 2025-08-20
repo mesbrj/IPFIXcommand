@@ -1,1 +1,2 @@
-# GoIPFIX-Command
+# IPFIXcommand
+![](/ipfix-command.gif)
