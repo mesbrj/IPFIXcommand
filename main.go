@@ -122,6 +122,9 @@ import "C"
 import (
 	"fmt"
 	"unsafe"
+
+	"github.com/gdamore/tcell/v2"
+	"github.com/rivo/tview"
 )
 
 func startFileCollector(ipfixFile, cert_ipfix_registry_xml string) {
@@ -213,7 +216,19 @@ func main() {
 	startFileCollector("sample_wireshark.ipfix", "cert_ipfix.xml")
 	defer C.freeMemory()
 
-	fmt.Println("IPFIX Records from file:")
-	fmt.Println(getAllRecordsAsText())
+	app := tview.NewApplication()
+	flex := tview.NewFlex().
+		AddItem(tview.NewBox().SetBorder(true).SetTitle("Left (1/2 x width of Top)"), 0, 1, false).
+		AddItem(tview.NewFlex().SetDirection(tview.FlexRow).
+			AddItem(tview.NewBox().SetBorder(true).SetTitle("Top"), 0, 1, false).
+			AddItem(tview.NewTextView().SetLabel("   IPFIX Records:   ").
+				SetTextColor(tcell.ColorGreen).
+				SetText(
+					getAllRecordsAsText()), 0, 3, true).
+			AddItem(tview.NewBox().SetBorder(true).SetTitle("Bottom (5 rows)"), 5, 1, false), 0, 2, false).
+		AddItem(tview.NewBox().SetBorder(true).SetTitle("Right (20 cols)"), 20, 1, false)
+	if err := app.SetRoot(flex, true).EnableMouse(true).SetFocus(flex).Run(); err != nil {
+		panic(err)
+	}
 
 }
