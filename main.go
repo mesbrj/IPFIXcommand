@@ -20,6 +20,7 @@ fbInfoElementSpec_t collectTemplate[] = {
     {"informationElementId",                2, 0 },
     {"informationElementDataType",          1, 0 },
     {"informationElementSemantics",         1, 0 },
+    {"informationElementName",              0, 0 },
     {"flowStartMilliseconds",               8, 0 },
     {"flowEndMilliseconds",                 8, 0 },
     {"sourceIPv4Address",                   4, 0 },
@@ -39,6 +40,7 @@ typedef struct {
     uint16_t      informationElementId;
     uint8_t       informationElementDataType;
     uint8_t       informationElementSemantics;
+    fbVarfield_t  informationElementName;
     uint64_t      flowStartMilliseconds;
     uint64_t      flowEndMilliseconds;
     uint32_t      sourceIPv4Address;
@@ -119,10 +121,7 @@ void freeMemory() {
 import "C"
 import (
 	"fmt"
-
-	"github.com/davecgh/go-spew/spew"
-	"github.com/gdamore/tcell/v2"
-	"github.com/rivo/tview"
+	"unsafe"
 )
 
 func startFileCollector(ipfixFile, cert_ipfix_registry_xml string) {
@@ -133,38 +132,88 @@ func startFileCollector(ipfixFile, cert_ipfix_registry_xml string) {
 	C.collectRecordFillMemory()
 }
 
+func formatIPv4(ip uint32) string {
+	// Bit shifting and masking to extract each octet
+	return fmt.Sprintf("%d.%d.%d.%d",
+		(ip>>24)&0xFF, (ip>>16)&0xFF, (ip>>8)&0xFF, ip&0xFF)
+}
+
+func analyzeRecordType(ipfixCollectRecord *C.collectRecord_st) (string, bool) {
+	// RFC 5610 Information Element Type Record
+	isInfoElement := (ipfixCollectRecord.privateEnterpriseNumber != 0 ||
+		ipfixCollectRecord.informationElementId != 0 ||
+		ipfixCollectRecord.informationElementDataType != 0)
+	// Flow Record
+	isFlowData := (ipfixCollectRecord.flowStartMilliseconds != 0 ||
+		ipfixCollectRecord.flowEndMilliseconds != 0)
+
+	if isInfoElement && !isFlowData {
+		return "RFC_5610_INFO_ELEMENT", true
+	} else if isFlowData && !isInfoElement {
+		return "FLOW_DATA", true
+	}
+	return "EMPTY_OR_UNKNOWN", false
+}
+
 func getAllRecordsAsText() string {
 	str := ""
 	record_count := 0
+	rfc5610_count := 0
+	flow_data_count := 0
+	unknown_count := 0
+
 	ipfixCollectRecord := C.getCollectRecord()
 	for C.nextRecord() {
 		record_count++
-		str += fmt.Sprintf(
-			"\nIPFIX RECORD %d\n\n%s",
-			record_count,
-			spew.Sdump(ipfixCollectRecord))
+
+		recordType, isKnown := analyzeRecordType(ipfixCollectRecord)
+
+		switch recordType {
+		case "RFC_5610_INFO_ELEMENT":
+			rfc5610_count++
+			str += fmt.Sprintf("\n RFC 5610 INFO ELEMENT RECORD %d:\n", rfc5610_count)
+			// Convert fbVarfield_t to Go string
+			nameLen := int(ipfixCollectRecord.informationElementName.len)
+			var nameStr string
+			if nameLen > 0 && ipfixCollectRecord.informationElementName.buf != nil {
+				nameStr = C.GoStringN((*C.char)(unsafe.Pointer(ipfixCollectRecord.informationElementName.buf)), C.int(nameLen))
+			} else {
+				nameStr = "(no name)"
+			}
+			str += fmt.Sprintf("   Element Name: %s\n", nameStr)
+			str += fmt.Sprintf("   Enterprise Number: %d\n", ipfixCollectRecord.privateEnterpriseNumber)
+			str += fmt.Sprintf("   Element ID: %d\n", ipfixCollectRecord.informationElementId)
+			str += fmt.Sprintf("   Data Type: %d\n", ipfixCollectRecord.informationElementDataType)
+			str += fmt.Sprintf("   Semantics: %d\n", ipfixCollectRecord.informationElementSemantics)
+		case "FLOW_DATA":
+			flow_data_count++
+			str += fmt.Sprintf("\n FLOW DATA RECORD %d:\n", flow_data_count)
+			str += fmt.Sprintf("   Source IP: %s (%d)\n", formatIPv4(uint32(ipfixCollectRecord.sourceIPv4Address)), ipfixCollectRecord.sourceIPv4Address)
+			str += fmt.Sprintf("   Dest IP: %s (%d)\n", formatIPv4(uint32(ipfixCollectRecord.destinationIPv4Address)), ipfixCollectRecord.destinationIPv4Address)
+			str += fmt.Sprintf("   Source Port: %d\n", ipfixCollectRecord.sourceTransportPort)
+			str += fmt.Sprintf("   Dest Port: %d\n", ipfixCollectRecord.destinationTransportPort)
+			str += fmt.Sprintf("   Protocol: %d\n", ipfixCollectRecord.protocolIdentifier)
+			str += fmt.Sprintf("   Packets: %d\n", ipfixCollectRecord.packetTotalCount)
+			str += fmt.Sprintf("   Octets: %d\n", ipfixCollectRecord.octetTotalCount)
+		default:
+			if !isKnown {
+				unknown_count++
+			}
+		}
 	}
+
+	str = str + fmt.Sprintf("\n SUMMARY:\n   RFC 5610 Records: %d\n   Flow Data Records: %d\n   Other/Unknown Records: %d\n   Total Records: %d\n",
+		rfc5610_count, flow_data_count, unknown_count, record_count)
+
 	return str
 }
 
 func main() {
 
-	startFileCollector("wireshark_new.ipfix", "cert_ipfix.xml")
+	startFileCollector("sample_wireshark.ipfix", "cert_ipfix.xml")
 	defer C.freeMemory()
 
-	app := tview.NewApplication()
-	flex := tview.NewFlex().
-		AddItem(tview.NewBox().SetBorder(true).SetTitle("Left (1/2 x width of Top)"), 0, 1, false).
-		AddItem(tview.NewFlex().SetDirection(tview.FlexRow).
-			AddItem(tview.NewBox().SetBorder(true).SetTitle("Top"), 0, 1, false).
-			AddItem(tview.NewTextView().SetLabel("   IPFIX Records:   ").
-				SetTextColor(tcell.ColorGreen).
-				SetText(
-					getAllRecordsAsText()), 0, 3, false).
-			AddItem(tview.NewBox().SetBorder(true).SetTitle("Bottom (5 rows)"), 5, 1, false), 0, 2, false).
-		AddItem(tview.NewBox().SetBorder(true).SetTitle("Right (20 cols)"), 20, 1, false)
-	if err := app.SetRoot(flex, true).EnableMouse(true).SetFocus(flex).Run(); err != nil {
-		panic(err)
-	}
+	fmt.Println("IPFIX Records from file:")
+	fmt.Println(getAllRecordsAsText())
 
 }
